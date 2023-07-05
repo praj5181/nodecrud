@@ -1,88 +1,119 @@
+const path = require('path');
 const express = require('express');
-
+const fs = require('fs');
 const userObj = require('../database/users');
 
 const router = express.Router();
 
-router.get("/", (req,res) => {
-    res.send("Default Page")
-});
+router.get("/", (req, res) => {
+    res.status(200).json({
+        message: "Default Message"
+    })
+})
 
-router.get("/users", (req,res) => {
-    try{
-        if(!userObj || !userObj.length) {
+router.get('/users', (req,res) => {
+    try {
+        if (!userObj || !userObj.length) {
             return res.status(404).json({success:false, data:"Users not found!"})
         }
-    }
-    catch(err) {
-        return res.status(500).json({message: "Internal Server Error"})
-    }
-    return res.status(200).json({message: "Users retrieved", success: true, users: userObj});
-});
-
-router.get("/users/:id", (req,res) => {
-    const userId = req.params.id;
-    const user = userObj.find(user => user.id === userId);
-    try{
-        if(!user) {
-            return res.status(404).json({success:false, data:"User not found!"})       
-        }
-    }
-    catch(err) {
-        return res.status(500).json({message: "Internal Server Error"})
-    }
-    return res.status(200).json({message: "User retrieved", success: true, user: user})
-});
-
-router.post("/users/add", (req,res) => {
-    const { email, firstName } = req.body;
-    if (!email || !firstName) {
-        res.status(400).json({
-          success: false,
-          message: 'Missing required User data fields'
+        return res.status(200).json({
+            message: "Users retrived",
+            success: true,
+            users: userObj
         });
-        return;
     }
+    catch (err) {
+        return res.status(500).json({
+            message: "Internal Server Error"
+        })
+    }
+});
 
-    const id = generateUserId();
+router.get('/user/:id', (req,res) => {
+    let user = userObj.find(user => user.id === req.params.id);
 
+    if (!user) {
+        res.status(404).json({ message: "User not found", success: false });
+    } else {
+        res.status(200).json({
+            message: "User successfully retrived",
+            success: true,
+            user: user
+        });
+    }
+});
+
+router.post('/add', (req,res) => {
+    const { email, firstName, lastName } = req.body;
+    const id = generateUserID();
     const newUser = {
         email: email,
         firstName: firstName,
-        id: id,
+        lastName: lastName,
+        id: id
     };
+
     userObj.push(newUser);
-  
-    res.json({
-      message: 'User added',
-      success: true,
+    const usersFilePath = path.join(__dirname, '..', 'database', 'users.js');
+
+    fs.writeFile(usersFilePath, 'module.exports = ' + JSON.stringify(userObj, null, 2), err => {
+        if (err) {
+            console.error(err);
+            res.status(500).json({ message: "Error adding user", success: false });
+        } else {
+            res.json({
+                message: "User added",
+                success: true,
+                id: newUser.id
+            });
+        }
     });
 });
 
-router.put('/users/update/:id', (req,res) => {
+router.put('/update/:id', (req,res) => {
     const id = req.params.id;
-    const { email, firstName } = req.body;
-
+    const { email, firstName, lastName } = req.body;
     const user = userObj.find(user => user.id === id);
+    let userIndex = userObj.findIndex(user => user.id === req.params.id);
 
-    if (user) {
+    if (!user) {
+        res.status(404).json({ message: "User not found", success: false });
+    } else if (!email || !firstName) {
+        res.status(400).json({ message: "Missing required User data fields", success: false });
+    } else {
         user.email = email || user.email;
         user.firstName = firstName || user.firstName;
+        user.lastName = lastName || user.lastName;
 
-        res.json({
-        message: 'User updated',
-        success: true,
-        });
-    } else {
-        res.status(404).json({
-        success: false,
-        message: 'User not found',
+        const userIndex = userObj.findIndex(user => user.id === req.params.id);
+        userObj[userIndex].email = email || userObj[userIndex].email;
+        userObj[userIndex].firstName = firstName || userObj[userIndex].firstName;
+        userObj[userIndex].lastName = lastName || userObj[userIndex].lastName;
+
+        const usersFilePath = path.join(__dirname, '..', 'database', 'users.js');
+
+        fs.writeFile(usersFilePath, 'module.exports = ' + JSON.stringify(userObj, null, 2), err => {
+            if (err) {
+                console.error(err);
+                res.status(500).json({ message: "Error updating user", success: false });
+            } else {
+                res.json({
+                    message: "User updated",
+                    success: true
+                });
+            }
         });
     }
 });
 
-function generateUserId() {
-    return Math.random().toString(36).substr(2, 9);
+router.all("*", (req, res) => {
+    const url = req.originalUrl;
+    res.status(404).json({
+        message: "Route not found for url : " + url
+    })
+})
+function generateUserID() {
+    return Math.random().toString(36).substr(2, 10);
 }
 
 module.exports = router;
